@@ -5,11 +5,13 @@
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <netdb.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
-#include <netdb.h>
-#include <pthread.h>
+#include <sys/ioctl.h>
+#include <linux/fs.h>
 
 #define FUSE_USE_VERSION 26
 #include <fuse.h>
@@ -72,6 +74,7 @@ static uint32_t bswap32(uint32_t n)
 static int hello_getattr(const char *path, struct stat *stbuf)
 {
 	int result = 0;
+	long sectors;
 
 	printf("[!] %s\n", __func__);
 
@@ -87,7 +90,30 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 			result = errno;
 			goto errout;
 		}
+
+		printf("before: dev:%d, size:%lld, blksize:%d, blocks:%lld\n", 
+			(int)stbuf->st_dev, stbuf->st_size, 
+			(int)stbuf->st_blksize, stbuf->st_blocks);
+
+		if (S_ISBLK(stbuf->st_mode)) {
+			ioctl(image_fd, BLKGETSIZE, &sectors);
+			if (result < 0) {
+				result = errno;
+				goto errout;
+			}
+			printf("blkdev: sectors:%ld\n", sectors);
+
+			stbuf->st_mode &= ~S_IFMT;
+			stbuf->st_mode |= S_IFREG;
+			stbuf->st_size = (off_t)sectors * 512;
+			stbuf->st_blksize = 512;
+			stbuf->st_blocks = sectors;
+		}
 		stbuf->st_nlink = 1;
+
+		printf("after : dev:%d, size:%lld, blksize:%d, blocks:%lld\n", 
+			(int)stbuf->st_dev, stbuf->st_size, 
+			(int)stbuf->st_blksize, stbuf->st_blocks);
 	} else {
 		result = -ENOENT;
 	}
@@ -677,7 +703,7 @@ int main(int argc, char *argv[])
 	
 	//logging header
 	memset(&st, 0, sizeof(st));
-	result = fstat(image_fd, &st);
+	result = hello_getattr(through_path, &st);
 	if (result == -1) {
 		result = errno;
 		goto errout;
