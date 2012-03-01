@@ -102,6 +102,10 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 				goto errout;
 			}
 			printf("blkdev: sectors:%ld\n", sectors);
+			//通常ファイルを偽装しているので PAGE_SIZE 単位で
+			//read/write 要求がくる。
+			//PAGE_SIZE の倍数に揃える。今は 4KB 固定。
+			sectors &= ~0x7;
 
 			stbuf->st_mode &= ~S_IFMT;
 			stbuf->st_mode |= S_IFREG;
@@ -242,7 +246,7 @@ static int hello_read(const char *path, char *buf, size_t size,
 		      off_t offset, struct fuse_file_info *fi)
 {
 	int result = 0;
-	ssize_t nread;
+	ssize_t nread, total;
 	struct access_history h;
 	off_t now;
 
@@ -261,10 +265,27 @@ static int hello_read(const char *path, char *buf, size_t size,
 		goto errout;
 	}
 	
-	nread = read(image_fd, buf, size);
-	if (nread != size) {
-		result = errno;
-		goto errout;
+	for (total = 0; total < size; total += nread) {
+		nread = read(image_fd, buf + total, size - total);
+		if (nread == 0) {
+			//eof
+			fprintf(stderr, 
+				"%s: reach EOF, offset:0x%llx, "
+				"size:%lld, total:%lld.\n", 
+				__func__, offset, 
+				(uint64_t)size, (uint64_t)total);
+			result = errno;
+			goto errout;
+		} else if (nread == -1) {
+			if (errno == EINTR) {
+				//interrupted, try again
+				nread = 0;
+				continue;
+			} else {
+				result = errno;
+				goto errout;
+			}
+		}
 	}
 	
 	pthread_mutex_unlock(&lock);
@@ -286,7 +307,7 @@ static int hello_write(const char *path, const char *buf, size_t size,
 		       off_t offset, struct fuse_file_info *fi)
 {
 	int result = 0;
-	ssize_t nwrite;
+	ssize_t nwrite, total;
 	struct access_history h;
 	off_t now;
 
@@ -305,12 +326,29 @@ static int hello_write(const char *path, const char *buf, size_t size,
 		goto errout;
 	}
 	
-	nwrite = write(image_fd, buf, size);
-	if (nwrite != size) {
-		result = errno;
-		goto errout;
+	for (total = 0; total < size; total += nwrite) {
+		nwrite = write(image_fd, buf + total, size - total);
+		if (nwrite == 0) {
+			//eof
+			fprintf(stderr, 
+				"%s: reach EOF, offset:0x%llx, "
+				"size:%lld, total:%lld.\n", 
+				__func__, offset, 
+				(uint64_t)size, (uint64_t)total);
+			result = errno;
+			goto errout;
+		} else if (nwrite == -1) {
+			if (errno == EINTR) {
+				//interrupted, try again
+				nwrite = 0;
+				continue;
+			} else {
+				result = errno;
+				goto errout;
+			}
+		}
 	}
-	
+
 	pthread_mutex_unlock(&lock);
 	
 	//logging
