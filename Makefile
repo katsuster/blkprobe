@@ -5,7 +5,7 @@ OBJS    = blkprobe.o
 CC      = gcc
 RM      = rm -f
 
-CFLAGS  = -Wall -D_FILE_OFFSET_BITS=64
+CFLAGS  = -Wall -O2 -D_FILE_OFFSET_BITS=64
 LDFLAGS = -lfuse -lpthread
 
 all: $(TARGET)
