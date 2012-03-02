@@ -24,13 +24,21 @@ static char *log_file = NULL;
 static int log_fd = -1;
 static const char *through_path = "/image";
 
-struct access_log_header {
+enum log_type {
+	LOG_OPEN  = 1, 
+	LOG_READ  = 10, 
+	LOG_WRITE = 20, 
+};
+
+struct access_log_open {
+	uint32_t op;
 	uint64_t capacity;
 };
 
-struct access_history {
+struct access_log_rw {
 	uint32_t op;
 	uint64_t address;
+	uint64_t size;
 };
 
 static uint64_t bswap64(uint64_t n)
@@ -69,6 +77,55 @@ static uint32_t bswap32(uint32_t n)
 	                (n & 0xffff0000UL) >> 16;
 	
 	return n;
+}
+
+static ssize_t write_access_log_header(int fd, 
+	const struct access_log_open *buf)
+{
+	int result = 0;
+	ssize_t nwritten;
+
+	nwritten = write(fd, &buf->op, sizeof(buf->op));
+	if (nwritten != sizeof(buf->op)) {
+		result = errno;
+		goto errout;
+	}
+
+	nwritten = write(fd, &buf->capacity, sizeof(buf->capacity));
+	if (nwritten != sizeof(buf->capacity)) {
+		result = errno;
+		goto errout;
+	}
+
+errout:
+	return result;
+}
+
+static ssize_t write_access_log(int fd, const struct access_log_rw *buf)
+{
+	int result = 0;
+	ssize_t nwritten;
+
+	nwritten = write(fd, &buf->op, sizeof(buf->op));
+	if (nwritten != sizeof(buf->op)) {
+		result = errno;
+		goto errout;
+	}
+
+	nwritten = write(fd, &buf->address, sizeof(buf->address));
+	if (nwritten != sizeof(buf->address)) {
+		result = errno;
+		goto errout;
+	}
+
+	nwritten = write(fd, &buf->size, sizeof(buf->size));
+	if (nwritten != sizeof(buf->size)) {
+		result = errno;
+		goto errout;
+	}
+
+errout:
+	return result;
 }
 
 static int hello_getattr(const char *path, struct stat *stbuf)
@@ -253,7 +310,7 @@ static int hello_read(const char *path, char *buf, size_t size,
 {
 	int result = 0;
 	ssize_t nread, total;
-	struct access_history h;
+	struct access_log_rw h;
 	off_t now;
 
 	//printf("[!] %s %08llx-%08llx\n", __func__, 
@@ -293,15 +350,17 @@ static int hello_read(const char *path, char *buf, size_t size,
 			}
 		}
 	}
-	
+
 	pthread_mutex_unlock(&lock);
-	
+
 	//logging
 	memset(&h, 0, sizeof(h));
-	h.op = bswap32(1);
+	h.op = bswap32(LOG_READ);
 	h.address = bswap64(offset);
-	write(log_fd, &h, sizeof(h));
-	
+	h.size = bswap64(size);
+	write_access_log(log_fd, &h);
+	//ignore the return value
+
 	return nread;
 errout:
 	perror("hello_read");
@@ -313,8 +372,8 @@ static int hello_write(const char *path, const char *buf, size_t size,
 		       off_t offset, struct fuse_file_info *fi)
 {
 	int result = 0;
-	ssize_t nwrite, total;
-	struct access_history h;
+	ssize_t nwritten, total;
+	struct access_log_rw h;
 	off_t now;
 
 	//printf("[!] %s %08llx-%08llx\n", __func__, 
@@ -332,9 +391,9 @@ static int hello_write(const char *path, const char *buf, size_t size,
 		goto errout;
 	}
 	
-	for (total = 0, nwrite = 0; total < size; total += nwrite) {
-		nwrite = write(image_fd, buf + total, size - total);
-		if (nwrite == 0) {
+	for (total = 0, nwritten = 0; total < size; total += nwritten) {
+		nwritten = write(image_fd, buf + total, size - total);
+		if (nwritten == 0) {
 			//eof
 			fprintf(stderr, 
 				"%s: reach EOF, offset:0x%llx, "
@@ -343,10 +402,10 @@ static int hello_write(const char *path, const char *buf, size_t size,
 				(long long int)size, (long long int)total);
 			result = errno;
 			goto errout;
-		} else if (nwrite == -1) {
+		} else if (nwritten == -1) {
 			if (errno == EINTR) {
 				//interrupted, try again
-				nwrite = 0;
+				nwritten = 0;
 				continue;
 			} else {
 				result = errno;
@@ -356,14 +415,16 @@ static int hello_write(const char *path, const char *buf, size_t size,
 	}
 
 	pthread_mutex_unlock(&lock);
-	
+
 	//logging
 	memset(&h, 0, sizeof(h));
-	h.op = bswap32(2);
+	h.op = bswap32(LOG_WRITE);
 	h.address = bswap64(offset);
-	write(log_fd, &h, sizeof(h));
-	
-	return nwrite;
+	h.size = bswap64(size);
+	write_access_log(log_fd, &h);
+	//ignore the return value
+
+	return nwritten;
 errout:
 	perror("hello_write");
 	
@@ -677,9 +738,8 @@ int main(int argc, char *argv[])
 	struct addrinfo hint;
 	struct addrinfo *addrs;
 	struct stat st;
-	struct access_log_header h;
+	struct access_log_open h;
 	int result;
-	ssize_t nwrite;
 	
 	if (argc < 2) {
 		fprintf(stderr, 
@@ -754,10 +814,10 @@ int main(int argc, char *argv[])
 	}
 	
 	memset(&h, 0, sizeof(h));
+	h.op = bswap32(LOG_OPEN);
 	h.capacity = bswap64(st.st_size);
-	nwrite = write(log_fd, &h, sizeof(h));
-	if (nwrite != sizeof(h)) {
-		result = errno;
+	result = write_access_log_header(log_fd, &h);
+	if (result != 0) {
 		goto errout;
 	}
 	
