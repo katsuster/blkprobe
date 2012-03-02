@@ -104,7 +104,7 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 				result = errno;
 				goto errout;
 			}
-			printf("blkdev: sectors:%zd\n", sectors);
+			printf("blkdev: sectors:%ld\n", sectors);
 			//通常ファイルを偽装しているので PAGE_SIZE 単位で
 			//read/write 要求がくる。
 			//PAGE_SIZE の倍数に揃える。今は 4KB 固定。
