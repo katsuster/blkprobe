@@ -91,9 +91,12 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 			goto errout;
 		}
 
-		printf("before: dev:%d, size:%zd, blksize:%zd, blocks:%zd\n", 
-			(int)stbuf->st_dev, stbuf->st_size, 
-			stbuf->st_blksize, stbuf->st_blocks);
+		printf("before: dev:%d, "
+			"size:%lld, blksize:%lld, blocks:%lld\n", 
+			(int)stbuf->st_dev, 
+			(long long int)stbuf->st_size, 
+			(long long int)stbuf->st_blksize, 
+			(long long int)stbuf->st_blocks);
 
 		if (S_ISBLK(stbuf->st_mode)) {
 			ioctl(image_fd, BLKGETSIZE, &sectors);
@@ -115,9 +118,12 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 		}
 		stbuf->st_nlink = 1;
 
-		printf("after : dev:%d, size:%zd, blksize:%zd, blocks:%zd\n", 
-			(int)stbuf->st_dev, stbuf->st_size, 
-			stbuf->st_blksize, stbuf->st_blocks);
+		printf("after : dev:%d, "
+			"size:%lld, blksize:%lld, blocks:%lld\n", 
+			(int)stbuf->st_dev, 
+			(long long int)stbuf->st_size, 
+			(long long int)stbuf->st_blksize, 
+			(long long int)stbuf->st_blocks);
 	} else {
 		result = -ENOENT;
 	}
@@ -251,7 +257,7 @@ static int hello_read(const char *path, char *buf, size_t size,
 	off_t now;
 
 	//printf("[!] %s %08llx-%08llx\n", __func__, 
-	//	(uint64_t)offset, (uint64_t)offset + size);
+	//	(long long int)offset, (long long int)(offset + size));
 
 	if (strcmp(path, through_path) != 0) {
 		return -ENOENT;
@@ -270,10 +276,10 @@ static int hello_read(const char *path, char *buf, size_t size,
 		if (nread == 0) {
 			//eof
 			fprintf(stderr, 
-				"%s: reach EOF, offset:0x%zx, "
-				"size:%zd, total:%zd.\n", 
-				__func__, offset, 
-				size, total);
+				"%s: reach EOF, offset:0x%llx, "
+				"size:%lld, total:%lld.\n", 
+				__func__, (long long int)offset, 
+				(long long int)size, (long long int)total);
 			result = errno;
 			goto errout;
 		} else if (nread == -1) {
@@ -312,7 +318,7 @@ static int hello_write(const char *path, const char *buf, size_t size,
 	off_t now;
 
 	//printf("[!] %s %08llx-%08llx\n", __func__, 
-	//	(uint64_t)offset, (uint64_t)offset + size);
+	//	(long long int)offset, (long long int)(offset + size));
 
 	if (strcmp(path, through_path) != 0) {
 		return -ENOENT;
@@ -331,10 +337,10 @@ static int hello_write(const char *path, const char *buf, size_t size,
 		if (nwrite == 0) {
 			//eof
 			fprintf(stderr, 
-				"%s: reach EOF, offset:0x%zx, "
-				"size:%zd, total:%zd.\n", 
-				__func__, offset, 
-				size, total);
+				"%s: reach EOF, offset:0x%llx, "
+				"size:%lld, total:%lld.\n", 
+				__func__, (long long int)offset, 
+				(long long int)size, (long long int)total);
 			result = errno;
 			goto errout;
 		} else if (nwrite == -1) {
