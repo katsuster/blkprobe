@@ -91,9 +91,9 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 			goto errout;
 		}
 
-		printf("before: dev:%d, size:%lld, blksize:%d, blocks:%lld\n", 
+		printf("before: dev:%d, size:%zd, blksize:%zd, blocks:%zd\n", 
 			(int)stbuf->st_dev, stbuf->st_size, 
-			(int)stbuf->st_blksize, stbuf->st_blocks);
+			stbuf->st_blksize, stbuf->st_blocks);
 
 		if (S_ISBLK(stbuf->st_mode)) {
 			ioctl(image_fd, BLKGETSIZE, &sectors);
@@ -101,7 +101,7 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 				result = errno;
 				goto errout;
 			}
-			printf("blkdev: sectors:%ld\n", sectors);
+			printf("blkdev: sectors:%zd\n", sectors);
 			//通常ファイルを偽装しているので PAGE_SIZE 単位で
 			//read/write 要求がくる。
 			//PAGE_SIZE の倍数に揃える。今は 4KB 固定。
@@ -115,9 +115,9 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 		}
 		stbuf->st_nlink = 1;
 
-		printf("after : dev:%d, size:%lld, blksize:%d, blocks:%lld\n", 
+		printf("after : dev:%d, size:%zd, blksize:%zd, blocks:%zd\n", 
 			(int)stbuf->st_dev, stbuf->st_size, 
-			(int)stbuf->st_blksize, stbuf->st_blocks);
+			stbuf->st_blksize, stbuf->st_blocks);
 	} else {
 		result = -ENOENT;
 	}
@@ -270,10 +270,10 @@ static int hello_read(const char *path, char *buf, size_t size,
 		if (nread == 0) {
 			//eof
 			fprintf(stderr, 
-				"%s: reach EOF, offset:0x%llx, "
-				"size:%lld, total:%lld.\n", 
+				"%s: reach EOF, offset:0x%zx, "
+				"size:%zd, total:%zd.\n", 
 				__func__, offset, 
-				(uint64_t)size, (uint64_t)total);
+				size, total);
 			result = errno;
 			goto errout;
 		} else if (nread == -1) {
@@ -331,10 +331,10 @@ static int hello_write(const char *path, const char *buf, size_t size,
 		if (nwrite == 0) {
 			//eof
 			fprintf(stderr, 
-				"%s: reach EOF, offset:0x%llx, "
-				"size:%lld, total:%lld.\n", 
+				"%s: reach EOF, offset:0x%zx, "
+				"size:%zd, total:%zd.\n", 
 				__func__, offset, 
-				(uint64_t)size, (uint64_t)total);
+				size, total);
 			result = errno;
 			goto errout;
 		} else if (nwrite == -1) {
@@ -678,7 +678,7 @@ int main(int argc, char *argv[])
 	if (argc < 2) {
 		fprintf(stderr, 
 			"usage:\n"
-			"%s imagefile mountpoint [options]\n", 
+			"%s imagefile logfile mountpoint [options]\n", 
 			argv[0]);
 		return 1;
 	}
