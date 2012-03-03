@@ -80,19 +80,23 @@ static uint32_t bswap32(uint32_t n)
 }
 
 static ssize_t write_access_log_header(int fd, 
-	const struct access_log_open *buf)
+	const struct access_log_open *aclog)
 {
 	int result = 0;
+	char buf[sizeof(struct access_log_open)];
+	size_t n;
 	ssize_t nwritten;
 
-	nwritten = write(fd, &buf->op, sizeof(buf->op));
-	if (nwritten != sizeof(buf->op)) {
-		result = errno;
-		goto errout;
-	}
+	n = 0;
 
-	nwritten = write(fd, &buf->capacity, sizeof(buf->capacity));
-	if (nwritten != sizeof(buf->capacity)) {
+	memmove(buf + n, &aclog->op, sizeof(aclog->op));
+	n += sizeof(aclog->op);
+
+	memmove(buf + n, &aclog->capacity, sizeof(aclog->capacity));
+	n += sizeof(aclog->capacity);
+
+	nwritten = write(fd, buf, n);
+	if (nwritten != n) {
 		result = errno;
 		goto errout;
 	}
@@ -101,25 +105,26 @@ errout:
 	return result;
 }
 
-static ssize_t write_access_log(int fd, const struct access_log_rw *buf)
+static ssize_t write_access_log(int fd, const struct access_log_rw *aclog)
 {
 	int result = 0;
+	char buf[sizeof(struct access_log_rw)];
+	size_t n;
 	ssize_t nwritten;
 
-	nwritten = write(fd, &buf->op, sizeof(buf->op));
-	if (nwritten != sizeof(buf->op)) {
-		result = errno;
-		goto errout;
-	}
+	n = 0;
 
-	nwritten = write(fd, &buf->address, sizeof(buf->address));
-	if (nwritten != sizeof(buf->address)) {
-		result = errno;
-		goto errout;
-	}
+	memmove(buf + n, &aclog->op, sizeof(aclog->op));
+	n += sizeof(aclog->op);
 
-	nwritten = write(fd, &buf->size, sizeof(buf->size));
-	if (nwritten != sizeof(buf->size)) {
+	memmove(buf + n, &aclog->address, sizeof(aclog->address));
+	n += sizeof(aclog->address);
+
+	memmove(buf + n, &aclog->size, sizeof(aclog->size));
+	n += sizeof(aclog->size);
+
+	nwritten = write(fd, buf, n);
+	if (nwritten != n) {
 		result = errno;
 		goto errout;
 	}
