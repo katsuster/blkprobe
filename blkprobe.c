@@ -13,7 +13,7 @@
 #include <sys/ioctl.h>
 #include <linux/fs.h>
 
-#define FUSE_USE_VERSION 26
+#define FUSE_USE_VERSION 35
 #include <fuse.h>
 
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -133,7 +133,7 @@ errout:
 	return result;
 }
 
-static int hello_getattr(const char *path, struct stat *stbuf)
+static int hello_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi)
 {
 	int result = 0;
 	long sectors;
@@ -248,9 +248,13 @@ static int hello_symlink(const char *linkname, const char *path)
 	return result;
 }
 
-static int hello_rename(const char *oldpath, const char *newpath)
+static int hello_rename(const char *oldpath, const char *newpath, unsigned int flags)
 {
 	int result = 0;
+
+	if (flags) {
+		return -EINVAL;
+	}
 
 	printf("[!] %s\n", __func__);
 
@@ -266,7 +270,7 @@ static int hello_link(const char *oldpath, const char *newpath)
 	return result;
 }
 
-static int hello_chmod(const char *path, mode_t mode)
+static int hello_chmod(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
 	int result = 0;
 
@@ -275,7 +279,7 @@ static int hello_chmod(const char *path, mode_t mode)
 	return result;
 }
 
-static int hello_chown(const char *path, uid_t uid, gid_t gid)
+static int hello_chown(const char *path, uid_t uid, gid_t gid, struct fuse_file_info *fi)
 {
 	int result = 0;
 
@@ -284,7 +288,7 @@ static int hello_chown(const char *path, uid_t uid, gid_t gid)
 	return result;
 }
 
-static int hello_truncate(const char *path, off_t offset)
+static int hello_truncate(const char *path, off_t offset, struct fuse_file_info *fi)
 {
 	int result = 0;
 
@@ -508,7 +512,7 @@ static int hello_getxattr(const char *path, const char *name, char *value,
 {
 	int result = 0;
 
-	printf("[!] %s\n", __func__);
+	//printf("[!] %s\n", __func__);
 
 	return result;
 }
@@ -542,7 +546,8 @@ static int hello_opendir(const char *path, struct fuse_file_info *fi)
 
 static int hello_readdir(const char *path, void *buf,
 			 fuse_fill_dir_t filler, off_t off,
-			 struct fuse_file_info *fi)
+			 struct fuse_file_info *fi,
+			 enum fuse_readdir_flags flags)
 {
 	int result = 0;
 
@@ -552,9 +557,9 @@ static int hello_readdir(const char *path, void *buf,
 		return -ENOENT;
 	}
 
-	filler(buf, ".", NULL, 0);
-	filler(buf, "..", NULL, 0);
-	filler(buf, through_path + 1, NULL, 0);
+	filler(buf, ".", NULL, 0, 0);
+	filler(buf, "..", NULL, 0, 0);
+	filler(buf, through_path + 1, NULL, 0, 0);
 
 	return result;
 }
@@ -578,7 +583,7 @@ static int hello_releasedir(const char *path, struct fuse_file_info *fi)
 	return result;
 }
 
-static void *hello_init(struct fuse_conn_info *conn)
+static void *hello_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
 	printf("[!] %s\n", __func__);
 	
@@ -620,26 +625,6 @@ static int hello_create(const char *path, mode_t mode,
 	return result;
 }
 
-static int hello_ftruncate(const char *path,
-			   off_t size, struct fuse_file_info *fi)
-{
-	int result = 0;
-
-	printf("[!] %s\n", __func__);
-
-	return result;
-}
-
-static int hello_fgetattr(const char *path, struct stat *buf,
-			  struct fuse_file_info *fi)
-{
-	int result = 0;
-
-	printf("[!] %s\n", __func__);
-
-	return result;
-}
-
 static int hello_lock(const char *path, struct fuse_file_info *fi, int cmd,
 		      struct flock *lock)
 {
@@ -650,7 +635,7 @@ static int hello_lock(const char *path, struct fuse_file_info *fi, int cmd,
 	return result;
 }
 
-static int hello_utimens(const char *path, const struct timespec tv[2])
+static int hello_utimens(const char *path, const struct timespec tv[2], struct fuse_file_info *fi)
 {
 	int result = 0;
 
@@ -668,7 +653,7 @@ static int hello_bmap(const char *path, size_t blocksize, uint64_t * idx)
 	return result;
 }
 
-static int hello_ioctl(const char *path, int cmd,
+static int hello_ioctl(const char *path, unsigned int cmd,
 		       void *arg, struct fuse_file_info *fi,
 		       unsigned int flags, void *data)
 {
@@ -724,13 +709,9 @@ static struct fuse_operations hello_oper = {
 	.destroy = hello_destroy,
 	.access = hello_access,
 	.create = hello_create,
-	.ftruncate = hello_ftruncate,
-	.fgetattr = hello_fgetattr,
 	.lock = hello_lock,
 	.utimens = hello_utimens,
 	.bmap = hello_bmap,
-	.flag_nullpath_ok = 0,
-	//.flag_reserved = 0, //don't set
 	.ioctl = hello_ioctl,
 	.poll = hello_poll,
 };
@@ -812,7 +793,7 @@ int main(int argc, char *argv[])
 	
 	//logging header
 	memset(&st, 0, sizeof(st));
-	result = hello_getattr(through_path, &st);
+	result = hello_getattr(through_path, &st, NULL);
 	if (result == -1) {
 		result = errno;
 		goto errout;
