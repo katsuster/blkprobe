@@ -3,6 +3,22 @@
 
 Probe read/write operations of a file.
 
+
+## Setup
+
+Install libfuse3-dev.
+
+```
+# apt-get install libfuse3-dev
+```
+
+And make this application.
+
+```
+$ make
+```
+
+
 ## Init
 
 Create a large file (for example 512MB ~ 1GB).
